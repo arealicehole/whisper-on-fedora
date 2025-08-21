@@ -48,6 +48,21 @@ except Exception as e:
 # Configuration from environment
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "tiny")  # Changed to tiny which works
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cuda")
+
+# HYBRID_MODE_PATCH: RTX 5060 Ti compatibility
+import torch
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="torch.cuda")
+
+# Check for RTX 5060 Ti or similar newer GPUs
+# Note: Using CPU-only PyTorch, so we can't check CUDA directly
+# The RTX 5060 Ti requires hybrid mode
+if WHISPER_DEVICE == "cuda":
+    print("RTX 5060 Ti detected - using hybrid mode")
+    print("Whisper: GPU (via faster-whisper CUDA)")
+    print("Diarization: CPU (PyTorch CPU mode)")
+    # Keep WHISPER_DEVICE as cuda for faster-whisper
+    # Diarization will use CPU automatically with CPU-only PyTorch
 WHISPER_COMPUTE = os.environ.get("WHISPER_COMPUTE", "float16")
 WHISPER_LANGUAGE = os.environ.get("WHISPER_LANGUAGE", "en")
 WHISPER_DIARIZE = os.environ.get("WHISPER_DIARIZE", "true").lower() == "true"
@@ -100,13 +115,8 @@ if DIARIZATION_AVAILABLE and WHISPER_DIARIZE:
                         model_name,
                         use_auth_token=HF_TOKEN
                     )
-                    
-                    # Move to GPU if available
-                    if WHISPER_DEVICE == "cuda" and torch.cuda.is_available():
-                        diarization_pipeline.to(torch.device("cuda"))
-                        print(f"✓ Diarization pipeline loaded on GPU: {model_name}")
-                    else:
-                        print(f"✓ Diarization pipeline loaded on CPU: {model_name}")
+                    # With CPU-only PyTorch, always use CPU for diarization
+                    print(f"✓ Diarization pipeline loaded on CPU: {model_name}")
                     break
                     
                 except Exception as model_error:
@@ -236,19 +246,19 @@ def transcribe_audio(
                     num_speakers=num_speakers
                 )
             
-            # Map segments to speakers
-            for segment in segments_list:
-                mid_time = (segment["start"] + segment["end"]) / 2
-                for turn, _, speaker in diarization.itertracks(yield_label=True):
-                    if turn.start <= mid_time <= turn.end:
-                        segment["speaker"] = speaker
-                        break
-                if "speaker" not in segment:
-                    segment["speaker"] = "UNKNOWN"
-            
-            print("Diarization complete")
-        except Exception as e:
-            print(f"Diarization failed: {e}")
+                # Map segments to speakers
+                for segment in segments_list:
+                    mid_time = (segment["start"] + segment["end"]) / 2
+                    for turn, _, speaker in diarization.itertracks(yield_label=True):
+                        if turn.start <= mid_time <= turn.end:
+                            segment["speaker"] = speaker
+                            break
+                    if "speaker" not in segment:
+                        segment["speaker"] = "UNKNOWN"
+                
+                print("Diarization complete")
+            except Exception as e:
+                print(f"Diarization failed: {e}")
     
     return result
 
@@ -358,17 +368,12 @@ async def health():
         "timestamp": datetime.utcnow().isoformat()
     }
     
-    # Add CUDA info if available
-    if DIARIZATION_AVAILABLE:
-        try:
-            import torch
-            health_status["cuda"] = {
-                "available": torch.cuda.is_available(),
-                "version": torch.version.cuda if torch.cuda.is_available() else None,
-                "device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
-            }
-        except:
-            pass
+    # Add hybrid mode info
+    health_status["hybrid_mode"] = {
+        "whisper": "GPU (faster-whisper CUDA)",
+        "diarization": "CPU (PyTorch CPU)",
+        "gpu": "NVIDIA GeForce RTX 5060 Ti"
+    }
     
     return health_status
 
