@@ -1,0 +1,42 @@
+[Unit]
+Description=Whisper API with Blackwell GPU Support (Docker)
+Documentation=https://github.com/yourusername/whisper-api
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+
+# User to run the service (change to your username)
+User=%i
+
+# Working directory
+WorkingDirectory=/home/%i/whisper-api
+
+# Pre-start: Ensure Docker is ready
+ExecStartPre=/bin/bash -c 'until docker info; do sleep 1; done'
+
+# Start the service
+ExecStart=/usr/bin/docker-compose -f docker/docker-compose.yml up
+
+# Stop the service
+ExecStop=/usr/bin/docker-compose -f docker/docker-compose.yml down
+
+# Reload command (optional)
+ExecReload=/usr/bin/docker-compose -f docker/docker-compose.yml restart
+
+# Environment
+Environment="DOCKER_HOST=unix:///var/run/docker.sock"
+
+# Resource limits (optional)
+# LimitNOFILE=65536
+# LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

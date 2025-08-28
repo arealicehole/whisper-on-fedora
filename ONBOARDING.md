@@ -1,530 +1,381 @@
-# Developer Onboarding Guide - Whisper API
+# 🚀 Whisper API - Developer Onboarding Guide
 
-Welcome to the Whisper API project! This comprehensive guide will help you understand the codebase and get productive quickly.
+Welcome to the Whisper API project! This guide will help you understand, set up, and start contributing to this GPU-accelerated speech-to-text service.
 
 ## 1. Project Overview
 
-### Project Purpose
-**Whisper API** is a production-ready REST API service that provides GPU-accelerated speech-to-text transcription with optional speaker diarization (speaker identification). It wraps OpenAI's Whisper model with enterprise features and optimizations.
+### What is Whisper API?
+A production-ready REST API service that provides high-performance audio transcription using OpenAI's Whisper model with optional speaker diarization (speaker identification).
 
-### Main Functionality
-- **Audio Transcription**: Convert speech to text using Whisper AI models
-- **Speaker Diarization**: Identify and label different speakers in audio
-- **Multiple Output Formats**: JSON, plain text, SRT, VTT subtitles
-- **Sync & Async Processing**: Handle both real-time and batch workloads
-- **GPU Acceleration**: Leverages NVIDIA GPUs for faster processing
+### Core Functionality
+- **Audio Transcription**: Convert speech to text using GPU-accelerated Whisper models
+- **Speaker Diarization**: Identify who's speaking when (optional per request)
+- **Multiple Output Formats**: JSON, plain text, SRT subtitles, VTT captions
+- **Async Processing**: Support for both synchronous and asynchronous transcription
 
 ### Tech Stack
-- **Language**: Python 3.11 (required for pyannote compatibility)
-- **Framework**: FastAPI (async REST API framework)
-- **AI/ML Libraries**:
-  - `faster-whisper`: GPU-accelerated Whisper implementation
-  - `pyannote.audio`: Speaker diarization pipeline
-  - `torch`: PyTorch for deep learning operations
-- **Server**: Uvicorn (ASGI server)
-- **Audio Processing**: soundfile, librosa, numpy
-- **Infrastructure**: Docker, systemd service support
+- **Language**: Python 3.11+ (required for pyannote compatibility)
+- **Framework**: FastAPI 0.115.0 with Uvicorn ASGI server
+- **AI/ML**: 
+  - `faster-whisper` 1.0.3 (GPU-accelerated Whisper implementation)
+  - `pyannote.audio` 3.3.1 (speaker diarization)
+  - PyTorch 2.3.0 with CUDA support
+- **Audio Processing**: librosa, soundfile
+- **GPU**: NVIDIA CUDA (required, no CPU fallback)
 
 ### Architecture Pattern
-- **Service-Oriented Architecture**: Single microservice with clear API boundaries
-- **Pipeline Pattern**: Audio → Transcription → Diarization → Formatting
-- **Hybrid Processing**: GPU for transcription, CPU for diarization (RTX 5060 Ti compatibility)
-
-### Key Dependencies
-```
-faster-whisper==1.0.3      # GPU-accelerated transcription
-pyannote.audio==3.3.1      # Speaker diarization
-fastapi==0.115.0           # REST API framework
-torch==2.3.0+cpu           # Deep learning (CPU mode for compatibility)
-uvicorn[standard]==0.32.0  # ASGI server
-numpy==1.26.4              # Numerical operations
-librosa==0.10.2            # Audio analysis
-```
+- **Service-Oriented**: Single FastAPI service with REST endpoints
+- **GPU-First**: Enforces GPU-only operation for consistent performance
+- **Stateless Design**: Each request is independent (async jobs stored in memory)
 
 ## 2. Repository Structure
 
 ```
 whisper-api/
 │
-├── main.py                    # 🎯 Main FastAPI application
-├── whisper_client.py          # Python client library
-├── diarization_handler.py     # Enhanced diarization with error recovery
-├── whisper-cli.sh            # CLI wrapper for API calls
+├── Core Files (Root)
+│   ├── main.py                 # FastAPI application & endpoints
+│   ├── gpu_validator.py        # GPU enforcement & validation
+│   ├── whisper_client.py       # Python client library
+│   ├── whisper-cli.sh          # CLI wrapper script
+│   │
+│   ├── start_whisper.sh        # Service management script
+│   ├── setup_venv.sh           # Virtual environment setup
+│   │
+│   ├── requirements.txt        # Main dependencies
+│   └── requirements_diarization.txt  # Alternative deps for Python 3.11
 │
-├── tests/                     # Test suite
-│   └── test_diarization_comprehensive.py
+├── examples/                   # Client usage examples
+│   └── basic_usage.py         # Python client demonstrations
 │
-├── examples/                  # Usage examples
-│   ├── basic_usage.py
-│   └── README.md
+├── PRPs/                      # Product Requirement Prompts
+│   ├── ai_docs/              # AI/LLM documentation
+│   ├── templates/            # PRP templates
+│   └── *.md                  # Feature specifications
 │
-├── PRPs/                      # Project Requirements Plans
-│   ├── templates/
-│   └── diarization-testing-hardening.md
+├── docs-archive/              # Organized documentation
+│   ├── core-docs/            # Main documentation
+│   ├── troubleshooting/      # GPU/CUDA guides
+│   ├── implementation/       # Technical details
+│   └── docker-docs/          # Container documentation
 │
-├── Setup & Configuration
-│   ├── setup.sh              # Initial setup script
-│   ├── setup_venv.sh         # Virtual environment setup
-│   ├── install_diarization.sh # Diarization dependencies
-│   ├── fix_cuda_fallback.sh  # CUDA compatibility fix
-│   └── start_whisper.sh      # Service management
-│
-├── Testing & Diagnostics
-│   ├── test_transcribe.py    # Transcription tests
-│   ├── test_diarization.py   # Diarization diagnostics
-│   ├── test_hybrid_mode.py   # Hybrid mode verification
-│   └── cuda_diagnostic.py    # CUDA compatibility checker
-│
-├── Configuration Files
-│   ├── requirements.txt      # Python dependencies
-│   ├── requirements_diarization.txt
-│   ├── Dockerfile            # Container definition
-│   ├── docker-compose.yml    # Docker orchestration
-│   └── whisper-api.service   # Systemd service unit
-│
-└── Documentation
-    ├── README.md             # Project overview
-    ├── QUICKSTART.md         # Quick setup guide
-    ├── CLAUDE.md             # AI assistant instructions
-    └── CONTRIBUTING.md       # Contribution guidelines
+└── docker-historic/           # Archived Docker files
+    ├── dockerfiles/          # Container definitions
+    ├── compose/              # Docker Compose configs
+    └── scripts/              # Container scripts
 ```
 
-### Directory Purposes
-- **Root**: Core application files and entry points
-- **tests/**: Comprehensive test suite for all components
-- **examples/**: Code samples and integration examples
-- **PRPs/**: Structured project planning documents
-- **Scripts**: Setup, configuration, and management utilities
+### Key Organizational Patterns
+- **Minimal Root**: Only essential files in root directory
+- **Documentation Archive**: All docs organized in `docs-archive/`
+- **Docker Separation**: Container files archived in `docker-historic/`
+- **PRP-Driven Development**: Feature specs in `PRPs/` directory
 
 ## 3. Getting Started
 
 ### Prerequisites
-- **OS**: Linux (Fedora/Ubuntu/Debian tested)
-- **Python**: 3.11 (required for pyannote compatibility)
-- **GPU**: NVIDIA GPU with CUDA support (optional but recommended)
-- **CUDA**: 12.1+ for newer GPUs, 11.8 for older
-- **RAM**: 4-8GB depending on model size
-- **Disk**: ~5GB for models and dependencies
+- **OS**: Linux (Ubuntu 20.04+, Fedora 35+) or macOS
+- **Python**: 3.11 (required for pyannote.audio compatibility)
+- **GPU**: NVIDIA GPU with 4GB+ VRAM
+- **CUDA**: Drivers installed and functional
+- **RAM**: 8GB minimum, 16GB recommended
+- **Disk**: 5GB for models and dependencies
 
 ### Environment Setup
 
-1. **Clone and navigate to project**:
+#### Step 1: Clone and Navigate
 ```bash
-cd /home/ice/whisper-api
+git clone [repository-url]
+cd whisper-api
 ```
 
-2. **Install Python 3.11** (if needed):
+#### Step 2: Create Virtual Environment
 ```bash
-# Fedora
-sudo dnf install python3.11 python3.11-devel
+# Automated setup (recommended)
+./setup_venv.sh
 
-# Ubuntu/Debian
-sudo apt-get install python3.11 python3.11-venv python3.11-dev
+# Or manually
+python3.11 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
 ```
 
-3. **Create virtual environment**:
+#### Step 3: Install Dependencies
 ```bash
-python3.11 -m venv ~/.venvs/whisper-diarize
-source ~/.venvs/whisper-diarize/bin/activate
-```
-
-4. **Install dependencies**:
-```bash
+# Standard installation
 pip install -r requirements.txt
+
+# Or for specific Python 3.11 compatibility
+pip install -r requirements_diarization.txt
 ```
 
-5. **Configure HuggingFace token** (for diarization):
+#### Step 4: Configure HuggingFace Token (for diarization)
 ```bash
 mkdir -p ~/.config/whisper
-echo "HF_TOKEN=your_token_here" > ~/.config/whisper/token
+echo "HF_TOKEN=your_huggingface_token_here" > ~/.config/whisper/token
 ```
-Get token from: https://huggingface.co/settings/tokens
-Accept license at: https://huggingface.co/pyannote/speaker-diarization-3.1
+Get your token from: https://huggingface.co/settings/tokens
+
+#### Step 5: Accept Pyannote License (for diarization)
+Visit and accept: https://huggingface.co/pyannote/speaker-diarization-3.1
 
 ### Running the Project
 
-**Development mode**:
+#### Start the API Service
 ```bash
-python main.py
-# API runs on http://localhost:8765
-```
-
-**Production mode**:
-```bash
+# Using management script (recommended)
 ./start_whisper.sh start
+
+# Or directly
+python main.py
 ```
 
-**Docker mode**:
+#### Verify Service Health
 ```bash
-docker-compose up -d
+curl http://localhost:8765/health | jq .
+```
+
+#### Stop the Service
+```bash
+./start_whisper.sh stop
 ```
 
 ### Running Tests
 ```bash
 # Test transcription
-python test_transcribe.py sample.wav
+curl -X POST http://localhost:8765/v1/transcribe \
+  -F "file=@test_audio.wav" | jq .
 
-# Test diarization setup
-python test_diarization.py
-
-# Run comprehensive test suite
-pytest tests/ -v
-
-# Test hybrid mode (RTX 5060 Ti)
-python test_hybrid_mode.py
-```
-
-### Building for Production
-```bash
-# Build Docker image
-docker build -t whisper-api:latest .
-
-# Install as systemd service
-sudo ./install_service.sh
+# Test with speaker diarization
+curl -X POST http://localhost:8765/v1/transcribe \
+  -F "file=@test_audio.wav" \
+  -F "diarize=true" | jq .
 ```
 
 ## 4. Key Components
 
 ### Entry Points
-
-**main.py** (lines 500-506):
-- FastAPI application initialization
-- Uvicorn server configuration
-- Port: 8765 (default)
+- **main.py**: FastAPI application entry point
+  - Line 419: `uvicorn.run()` starts the server
+  - Default port: 8765
 
 ### Core Business Logic
+- **Transcription Pipeline** (main.py:188-248)
+  - Audio file validation
+  - Whisper model inference
+  - Optional diarization processing
+  - Format conversion (JSON/text/SRT/VTT)
 
-**transcribe_audio()** (main.py:176-263):
-- Core transcription function
-- Handles Whisper processing
-- Optional diarization integration
-- Segment extraction and formatting
-
-**DiarizationHandler** (diarization_handler.py):
-- Enhanced error recovery
-- Speaker embedding cache
-- Retry logic with exponential backoff
-- CUDA fallback mechanisms
+### GPU Enforcement
+- **gpu_validator.py**: Ensures GPU-only operation
+  - No CPU fallback allowed
+  - Validates CUDA availability
+  - Checks memory requirements (4GB minimum)
 
 ### API Endpoints
-
-1. **GET /** - Service information
-2. **GET /health** - Health check with diarization status
-3. **POST /v1/transcribe** - Synchronous transcription
-   - Parameters: file, diarize, num_speakers, language, format
-4. **POST /v2/transcript** - Asynchronous transcription
-5. **GET /v2/transcript/{job_id}** - Get async job results
-
-### Database/Storage
-- **In-memory job storage**: `jobs_storage` dictionary
-- **Speaker embedding cache**: LRU cache in diarization handler
-- **Temporary files**: Uses tempfile for audio processing
+- `GET /` - Service information
+- `GET /health` - Health check with GPU status
+- `POST /v1/transcribe` - Synchronous transcription
+- `POST /v2/transcript` - Asynchronous transcription
+- `GET /v2/transcript/{job_id}` - Get async results
 
 ### Configuration Management
-- Environment variables for runtime config
-- `~/.config/whisper/token` for HF authentication
-- Hybrid mode detection for GPU compatibility
-
-### Authentication
-- HuggingFace token for pyannote models
-- No API authentication (add if needed for production)
+- Environment variables control behavior:
+  - `WHISPER_MODEL`: Model size (tiny/base/small/medium/large)
+  - `WHISPER_DEVICE`: Always "cuda" (enforced)
+  - `WHISPER_LANGUAGE`: Default language
+  - `WHISPER_DIARIZE`: Enable diarization by default
 
 ## 5. Development Workflow
 
-### Git Branch Strategy
-```bash
-main         # Production-ready code
-develop      # Integration branch
-feature/*    # New features
-fix/*        # Bug fixes
-test/*       # Experimental changes
-```
+### Branch Strategy
+- `main`: Production-ready code
+- `feature/*`: New features
+- `fix/*`: Bug fixes
+- `docs/*`: Documentation updates
 
-### Creating a New Feature
-
-1. **Create branch**:
-```bash
-git checkout -b feature/your-feature
-```
-
-2. **Make changes** following patterns in codebase
-
-3. **Test locally**:
-```bash
-python test_transcribe.py
-curl -X POST http://localhost:8765/v1/transcribe -F "file=@test.wav"
-```
-
-4. **Run tests**:
-```bash
-pytest tests/
-```
-
-5. **Commit with meaningful message**:
-```bash
-git add .
-git commit -m "feat: add support for new audio format"
-```
+### Adding a New Feature
+1. Create feature branch: `git checkout -b feature/your-feature`
+2. Implement changes following existing patterns
+3. Test locally with various audio formats
+4. Update documentation if needed
+5. Create pull request with clear description
 
 ### Code Style
-- **Python**: Follow PEP 8
-- **Docstrings**: Use for all public functions
-- **Type hints**: Preferred for function signatures
-- **Line length**: 100 characters max
+- Python: Follow PEP 8
+- Use type hints for function parameters
+- Document complex logic with inline comments
+- Keep functions focused and under 50 lines
 
 ### Testing Requirements
-- Unit tests for new functions
-- Integration tests for API changes
-- Performance benchmarks for optimizations
-
-### CI/CD Pipeline
-- Currently manual deployment
-- Future: GitHub Actions for automated testing
-- Docker builds for containerized deployment
+- Test with multiple audio formats (WAV, MP3, M4A)
+- Verify GPU memory usage stays within limits
+- Check both sync and async endpoints
+- Test error cases (invalid audio, missing files)
 
 ## 6. Architecture Decisions
 
 ### Design Patterns
-
-**Pipeline Pattern**:
-- Audio → Preprocessing → Transcription → Diarization → Postprocessing
-- Each stage can fail independently with fallbacks
-
-**Singleton Pattern**:
-- DiarizationHandler uses singleton for resource management
-- Model loading happens once at startup
-
-**Factory Pattern**:
-- Output formatting based on format parameter
+- **Singleton GPU Validator**: Single instance ensures consistent GPU checks
+- **Async Processing**: Background tasks for long-running transcriptions
+- **Factory Pattern**: Model loading with fallback versions
 
 ### State Management
-- Stateless API design
-- Job state tracked in memory (consider Redis for production)
-- Model state persisted across requests
+- **Stateless API**: No session management
+- **In-Memory Job Storage**: Async jobs stored in dictionary (not persistent)
+- **Temporary Files**: Cleaned up after processing
 
-### Error Handling Strategy
-```python
-try:
-    # Core operation
-except CUDAError:
-    # Fallback to CPU
-except ModelLoadError:
-    # Try alternative model
-except Exception:
-    # Log and return error response
-```
-
-### Logging
-- Console logging in development
-- File logging via nohup in production
-- Structured logging for debugging
+### Error Handling
+- **GPU Enforcement**: Hard fail if GPU not available
+- **Graceful Diarization Fallback**: Continue without speaker identification
+- **Detailed Error Messages**: Include remediation steps
 
 ### Security Measures
-- Input validation on file uploads
-- Temporary file cleanup
-- Token storage in separate config file
-- No direct command execution
-
-### Performance Optimizations
-- GPU acceleration for transcription
-- Speaker embedding caching
-- Batch processing support
-- Memory-mapped model loading
+- **File Validation**: Check audio file headers
+- **Size Limits**: Prevent oversized uploads
+- **Token Management**: HuggingFace tokens stored securely
+- **No Exposed Secrets**: Environment variables for sensitive data
 
 ## 7. Common Tasks
 
-### Adding a New API Endpoint
-
-1. Define in main.py:
+### Add a New Whisper Model Size
 ```python
-@app.post("/v1/your-endpoint")
-async def your_endpoint(
-    param: str = Form(...)
-):
-    # Implementation
-    return {"result": "..."}
+# In main.py, update WHISPER_MODEL options
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")  # Change default
+
+# Verify GPU memory requirements for larger models
+# tiny: 39M, base: 74M, small: 244M, medium: 769M, large: 1550M
 ```
 
-2. Add to API info in root endpoint
-3. Document in README
-
-### Creating a New Audio Processor
-
-1. Create processor function:
+### Change Default Port
 ```python
-def process_audio_custom(audio_path: str) -> Dict:
-    # Load audio
-    # Process
-    # Return results
+# In main.py, line 419
+uvicorn.run(app, host="127.0.0.1", port=8765)  # Change port number
 ```
 
-2. Integrate with main pipeline
-3. Add error handling
-
-### Adding a Test
-
-1. Create test file in tests/:
+### Add Output Format
 ```python
-def test_your_feature():
-    # Arrange
-    # Act
-    # Assert
-    assert result == expected
+# In main.py, add to format_output() function
+elif format == "your_format":
+    return YourFormatResponse(content=formatted_data)
 ```
 
-2. Run with pytest
-
-### Debugging Common Issues
-
-**CUDA errors**:
+### Debug Audio Processing
 ```bash
-python cuda_diagnostic.py
-./fix_cuda_fallback.sh  # For RTX 5060 Ti
-```
+# Enable debug logs
+export WHISPER_DEBUG=true
+python main.py
 
-**Diarization not loading**:
-```bash
-python test_diarization.py
-# Check HF token and model access
-```
-
-**Out of memory**:
-- Reduce batch size
-- Use smaller model (tiny/base)
-- Enable CPU fallback
-
-### Updating Dependencies
-```bash
-pip list --outdated
-pip install --upgrade package_name
-# Test thoroughly after updates
+# Check GPU memory usage
+nvidia-smi -l 1  # Update every second
 ```
 
 ## 8. Potential Gotchas
 
-### Non-Obvious Configurations
-- **Hybrid Mode**: RTX 5060 Ti automatically uses CPU for diarization
-- **VAD disabled**: Voice Activity Detection filtered too aggressively
-- **Model sizes**: tiny=39M, base=74M, small=244M, medium=769M, large=1550M
+### GPU/CUDA Issues
+- **RTX 5060 Ti Warning**: Blackwell architecture (sm_120) shows PyTorch warnings but works
+- **CUDA Mismatch**: Ensure PyTorch CUDA version matches system CUDA
+- **Memory Errors**: Large models require more VRAM (8GB+ for large model)
 
-### Required Environment Variables
-```bash
-WHISPER_MODEL=tiny       # Model size
-WHISPER_DEVICE=cuda      # or cpu
-WHISPER_COMPUTE=float16  # Precision
-WHISPER_LANGUAGE=en      # Default language
-WHISPER_DIARIZE=true     # Enable diarization
-HF_TOKEN=hf_xxxxx        # In ~/.config/whisper/token
-```
+### Diarization Limitations
+- **Python Version**: Must use Python 3.11 for pyannote compatibility
+- **License Required**: Must accept pyannote license on HuggingFace
+- **Token Required**: HuggingFace token needed for model download
+- **GPU Incompatibility**: Some newer GPUs may not support diarization models
 
-### External Dependencies
-- NVIDIA drivers for GPU support
-- CUDA toolkit (optional, included in PyTorch)
-- FFmpeg for audio format conversion
-- Internet for first model download
+### Common Errors
+- **Port Already in Use**: Kill existing process or change port
+- **Import Errors**: Ensure virtual environment is activated
+- **File Not Found**: Use absolute paths or `@` prefix in curl
+- **No GPU Found**: Check NVIDIA drivers with `nvidia-smi`
 
-### Known Issues
-1. **RTX 5060 Ti**: Requires hybrid mode (sm_120 not supported)
-2. **Python 3.12**: Compatibility issues with pyannote
-3. **Memory leaks**: Can occur with very long audio files
-4. **Port conflicts**: Default 8765 might be in use
-
-### Performance Bottlenecks
-- Model loading: First request takes longer
-- Diarization: CPU-bound in hybrid mode
-- Large files: Consider chunking for >1 hour audio
-- Concurrent requests: Limited by GPU memory
-
-### Technical Debt
-- In-memory job storage (needs Redis for production)
-- No request authentication
-- Limited error recovery in async jobs
-- Manual deployment process
+### Performance Considerations
+- **Model Loading**: First request takes longer (model initialization)
+- **Memory Leaks**: Monitor long-running instances
+- **Concurrent Requests**: Limited by GPU memory
+- **File Cleanup**: Temporary files accumulate if service crashes
 
 ## 9. Documentation and Resources
 
-### Existing Documentation
-- **README.md**: Comprehensive project overview
-- **QUICKSTART.md**: Essential setup steps
-- **CLAUDE.md**: AI assistant context
-- **examples/README.md**: Integration examples
-- **PRPs/**: Detailed technical plans
+### Project Documentation
+- `docs-archive/core-docs/`: Original README and guides
+- `docs-archive/troubleshooting/`: GPU and CUDA solutions
+- `PRPs/`: Feature specifications and planning
+
+### External Resources
+- [Faster Whisper Docs](https://github.com/guillaumekln/faster-whisper)
+- [Pyannote Documentation](https://github.com/pyannote/pyannote-audio)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit)
 
 ### API Documentation
-Access at `http://localhost:8765/docs` (FastAPI automatic docs)
+- Interactive docs: http://localhost:8765/docs (when running)
+- OpenAPI schema: http://localhost:8765/openapi.json
 
-### Database Schema
-No database currently (in-memory storage)
+## 10. Next Steps - New Developer Checklist
 
-### Deployment Guides
-- Docker: See docker-compose.yml
-- Systemd: See whisper-api.service
-- Manual: Use start_whisper.sh
-
-### Team Conventions
-- Meaningful commit messages
-- Test before pushing
-- Document API changes
-- Update requirements.txt for new dependencies
-
-## 10. Next Steps - Developer Checklist
-
-### Essential Tasks
+### Week 1: Environment Setup
 - [ ] Set up Python 3.11 environment
-- [ ] Install dependencies
+- [ ] Install dependencies successfully
 - [ ] Configure HuggingFace token
-- [ ] Run `python main.py` successfully
-- [ ] Test API with curl: `curl http://localhost:8765/health`
-- [ ] Make a test transcription
-- [ ] Run the test suite
+- [ ] Run the API service
+- [ ] Successfully transcribe a test audio file
 
-### Understanding the Codebase
-- [ ] Read through main.py
-- [ ] Understand transcribe_audio() flow
-- [ ] Review API endpoints
-- [ ] Explore diarization_handler.py
-- [ ] Check examples/basic_usage.py
+### Week 2: Understanding the Codebase
+- [ ] Read through main.py completely
+- [ ] Understand GPU validation flow
+- [ ] Trace a request through the transcription pipeline
+- [ ] Review client library (whisper_client.py)
+- [ ] Experiment with different model sizes
 
-### First Contribution
+### Week 3: Making Contributions
 - [ ] Fix a small bug or typo
-- [ ] Add a test case
+- [ ] Add a helpful comment or docstring
 - [ ] Improve error messages
-- [ ] Update documentation
-- [ ] Add an example script
+- [ ] Add a new example to examples/
+- [ ] Update documentation based on your learning
 
-### Advanced Tasks
-- [ ] Optimize performance
-- [ ] Add new output format
-- [ ] Implement authentication
-- [ ] Add Redis for job storage
-- [ ] Create GitHub Actions workflow
+### Areas to Start Contributing
+1. **Documentation**: Improve based on your onboarding experience
+2. **Examples**: Add more client usage examples
+3. **Error Handling**: Enhance error messages and recovery
+4. **Testing**: Add test scripts for edge cases
+5. **Performance**: Profile and optimize bottlenecks
 
-## Troubleshooting Quick Reference
+## Support and Communication
 
-| Issue | Solution |
-|-------|----------|
-| CUDA not found | Run `./fix_cuda_fallback.sh` |
-| Diarization fails | Check HF token, accept model license |
-| Port in use | `lsof -i:8765` and kill process |
-| Out of memory | Use smaller model or CPU mode |
-| No segments found | Check audio quality, disable VAD |
-| Python version | Must use Python 3.11 |
+### Getting Help
+1. Check `docs-archive/troubleshooting/` for common issues
+2. Review PRPs for feature context
+3. Search existing GitHub issues
+4. Check GPU compatibility guides
 
-## Support Channels
-
-- GitHub Issues: Report bugs and request features
-- Documentation: Check README and QUICKSTART
-- Logs: `/tmp/whisper.log` or `~/.whisper-api.log`
-- Diagnostics: Run test scripts in root directory
-
-## Performance Expectations
-
-- **Transcription Speed**: 0.1-0.5x real-time (GPU)
-- **Diarization Speed**: 0.5-1x real-time (CPU)
-- **Memory Usage**: 2-4GB for small model
-- **Startup Time**: 5-10 seconds
-- **API Latency**: <100ms overhead
+### Reporting Issues
+When reporting issues, include:
+- Python version
+- GPU model and CUDA version
+- Error messages and stack traces
+- Steps to reproduce
+- Audio file characteristics (format, duration)
 
 ---
 
-**Welcome aboard!** Start with the checklist in Section 10 and don't hesitate to explore the codebase. The test files are great examples of how everything works together.
+## Quick Command Reference
+
+```bash
+# Service Management
+./start_whisper.sh start|stop|status|restart
+
+# Testing
+curl -X POST http://localhost:8765/v1/transcribe -F "file=@audio.mp3"
+
+# Monitoring
+nvidia-smi                         # GPU status
+curl http://localhost:8765/health  # Service health
+tail -f ~/.whisper-api.log        # Service logs
+
+# Python Client
+python -c "from whisper_client import WhisperClient; print(WhisperClient().transcribe('audio.wav'))"
+```
+
+Welcome to the team! 🎉 Start with the checklist and don't hesitate to explore and improve the codebase.

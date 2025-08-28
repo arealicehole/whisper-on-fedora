@@ -91,10 +91,27 @@ start_service() {
         pip install -r requirements_diarization.txt
     fi
     
-    # Set environment variables
+    # GPU Validation - Service requires GPU
+    echo -e "${YELLOW}Validating GPU requirements...${NC}"
+    if ! python gpu_validator.py; then
+        echo -e "${RED}❌ GPU validation failed!${NC}"
+        echo -e "${RED}This service requires GPU acceleration. CPU fallback is not supported.${NC}"
+        echo ""
+        echo "Please ensure:"
+        echo "  1. NVIDIA GPU is present: nvidia-smi"
+        echo "  2. CUDA drivers are installed"
+        echo "  3. PyTorch has CUDA support"
+        echo ""
+        echo "For RTX 5060 Ti Blackwell, use PyTorch nightly:"
+        echo "  pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ GPU validation passed${NC}"
+    
+    # Set environment variables (GPU-only, no CPU fallback)
     export WHISPER_MODEL="${WHISPER_MODEL:-small}"
-    export WHISPER_DEVICE="${WHISPER_DEVICE:-cuda}"
-    export WHISPER_COMPUTE="${WHISPER_COMPUTE:-float16}"
+    export WHISPER_DEVICE="cuda"  # Force GPU, no override allowed
+    export WHISPER_COMPUTE="float16"  # GPU-optimized precision
     export WHISPER_DIARIZE="${WHISPER_DIARIZE:-true}"  # Available but not default
     
     # Start the service in background

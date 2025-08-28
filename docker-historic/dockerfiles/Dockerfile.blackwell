@@ -1,0 +1,79 @@
+# NVIDIA NGC PyTorch container with Blackwell (sm_120) support
+# Version 25.02 includes CUDA 12.8 and sm_120 architecture support
+FROM nvcr.io/nvidia/pytorch:25.02-py3
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --upgrade pip setuptools wheel
+
+# Install non-PyTorch dependencies first
+RUN pip install --no-cache-dir \
+    fastapi==0.115.5 \
+    uvicorn[standard]==0.32.1 \
+    python-multipart==0.0.18 \
+    httpx==0.28.0 \
+    python-dotenv==1.0.1 \
+    aiofiles \
+    pydantic
+
+# Install faster-whisper (doesn't conflict with PyTorch)
+RUN pip install --no-cache-dir faster-whisper==1.0.3
+
+# Install audio processing libraries
+RUN pip install --no-cache-dir \
+    soundfile==0.12.1 \
+    librosa==0.10.2.post1
+
+# Now handle pyannote carefully
+# First install the minimal dependencies that don't conflict
+RUN pip install --no-cache-dir \
+    einops>=0.6.0 \
+    omegaconf>=2.1 \
+    huggingface-hub>=0.24.0 \
+    scikit-learn>=1.3.0 \
+    pyannote.core>=5.0 \
+    pyannote.metrics>=3.2
+
+# Install pyannote.audio WITHOUT any torch dependencies
+RUN pip install --no-cache-dir --no-deps pyannote.audio==3.1.1
+
+# Install speechbrain without torch dependencies  
+RUN pip install --no-cache-dir --no-deps speechbrain==1.0.0
+
+# Copy application files
+COPY main.py /app/
+COPY diarization_handler.py /app/
+COPY whisper_client.py /app/
+
+# Create necessary directories
+RUN mkdir -p /root/.config/whisper \
+    /root/.cache/huggingface \
+    /root/.cache/whisper \
+    /app/audio_files
+
+# Set environment variables for optimal performance
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_VISIBLE_DEVICES=0
+ENV TORCH_CUDA_ARCH_LIST="12.0"
+ENV WHISPER_DEVICE="cuda"
+ENV WHISPER_COMPUTE="float16"
+ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+# Expose API port
+EXPOSE 8765
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8765/health || exit 1
+
+# Runtime verification and start
+CMD python -c "import torch; print('=========================================='); print('Runtime PyTorch Verification'); print('=========================================='); print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No GPU'; print(f'GPU: {gpu_name}'); print('==========================================');" && python main.py

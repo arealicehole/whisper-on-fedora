@@ -1,60 +1,69 @@
-# Whisper API Quick Start Guide
+# 🚀 Whisper API - Quick Start Guide
+
+Get the Whisper API running in 5 minutes!
+
+## Prerequisites
+- Linux/macOS with NVIDIA GPU (4GB+ VRAM)
+- Python 3.11
+- CUDA drivers installed
 
 ## Setup (One Time)
 
-### Option 1: Quick Start
+### 1. Clone & Enter Directory
 ```bash
-# Install Python 3.11 environment
-./setup_isolated_python.sh
-
-# Activate and install dependencies
-source ~/.venvs/whisper-diarize/bin/activate
-pip install -r requirements_diarization.txt
+git clone [repository-url]
+cd whisper-api
 ```
 
-### Option 2: System Service (Auto-start on boot)
+### 2. Create Virtual Environment
 ```bash
-sudo ./install_service.sh
-sudo systemctl start whisper-api
+./setup_venv.sh
+# Or manually: python3.11 -m venv venv && source venv/bin/activate
 ```
 
-## Starting the Service
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
 
-### Manual Start
+### 4. Configure HuggingFace Token (Optional - for speaker diarization)
+```bash
+mkdir -p ~/.config/whisper
+echo "HF_TOKEN=your_token_here" > ~/.config/whisper/token
+```
+Get token from: https://huggingface.co/settings/tokens
+
+## Run the Service
+
+### Start
 ```bash
 ./start_whisper.sh start
 ```
 
-### Check Status
+### Check Health
 ```bash
-./start_whisper.sh status
+curl http://localhost:8765/health | jq .status
+# Expected: "healthy"
 ```
 
-## Using the API
-
-### Basic Transcription (Fast, No Speakers)
+### Stop
 ```bash
-# Default - just transcription
+./start_whisper.sh stop
+```
+
+## Use the API
+
+### Basic Transcription
+```bash
 curl -X POST http://localhost:8765/v1/transcribe \
-  -F "file=@audio.wav"
+  -F "file=@audio.mp3" | jq .text
 ```
 
-### With Speaker Diarization (Slower, Identifies Speakers)
+### With Speaker Identification
 ```bash
-# Add diarize=true to enable speaker detection
 curl -X POST http://localhost:8765/v1/transcribe \
-  -F "file=@audio.wav" \
-  -F "diarize=true" \
-  -F "num_speakers=2"
-```
-
-### Using the CLI
-```bash
-# Basic
-./whisper-cli.sh audio.wav
-
-# With diarization
-./whisper-cli.sh audio.wav --diarize --speakers 3
+  -F "file=@audio.mp3" \
+  -F "diarize=true" | jq .
 ```
 
 ### From Python
@@ -62,54 +71,108 @@ curl -X POST http://localhost:8765/v1/transcribe \
 from whisper_client import WhisperClient
 
 client = WhisperClient()
-
-# Basic transcription
-result = client.transcribe("audio.wav")
-
-# With diarization
-result = client.transcribe("audio.wav", diarize=True, num_speakers=2)
-
-# Pretty print
-print(client.format_transcript(result, style="dialogue"))
+result = client.transcribe("audio.mp3")
+print(result["text"])
 ```
 
-## Key Points
+### Async Transcription (for long files)
+```bash
+# Submit job
+JOB_ID=$(curl -X POST http://localhost:8765/v2/transcript \
+  -F "file=@long_audio.mp3" | jq -r .id)
 
-1. **Diarization is OPTIONAL** - Each API call can choose whether to use it
-   - `diarize=false` (default): Fast transcription only
-   - `diarize=true`: Slower but identifies speakers
+# Check status
+curl http://localhost:8765/v2/transcript/$JOB_ID | jq .status
 
-2. **Service runs once** - Start it and leave it running
-   - Manual: `./start_whisper.sh start`
-   - Auto: Install as systemd service
+# Get results when ready
+curl http://localhost:8765/v2/transcript/$JOB_ID | jq .result
+```
 
-3. **Any program can use it** - It's just HTTP
-   - Your Python scripts (any version)
-   - Shell scripts (curl)
-   - Web apps (JavaScript)
-   - Any language that can make HTTP requests
+## Output Formats
+
+Add `format` parameter to control output:
+- `json` (default) - Full details with segments
+- `text` - Plain text only
+- `srt` - Subtitle format with timecodes
+- `vtt` - Web video text tracks
+
+```bash
+# Get plain text
+curl -X POST http://localhost:8765/v1/transcribe \
+  -F "file=@audio.mp3" \
+  -F "format=text"
+
+# Get subtitles
+curl -X POST http://localhost:8765/v1/transcribe \
+  -F "file=@audio.mp3" \
+  -F "format=srt" > subtitles.srt
+```
 
 ## Troubleshooting
 
-### Check if service is running
+### Port Already in Use
 ```bash
-./start_whisper.sh status
-curl http://localhost:8765/health | jq .
+# Find and kill existing process
+lsof -i :8765
+kill [PID]
 ```
 
-### Check diarization status
+### GPU Not Found
 ```bash
-curl http://localhost:8765/health | jq .diarization
+# Check NVIDIA driver
+nvidia-smi
+
+# Should show your GPU and CUDA version
 ```
 
-### View logs
+### Import Errors
 ```bash
-./start_whisper.sh logs
-# or
+# Ensure virtual environment is activated
+source venv/bin/activate
+which python  # Should point to venv/bin/python
+```
+
+### File Upload Issues
+```bash
+# Always use @ before filename
+# ✅ Correct: -F "file=@audio.mp3"  
+# ❌ Wrong:   -F "file=audio.mp3"
+```
+
+## Model Sizes
+
+Set `WHISPER_MODEL` environment variable before starting:
+- `tiny` - Fastest, least accurate (39MB)
+- `base` - Balanced (74MB) 
+- `small` - Good accuracy (244MB) - Default
+- `medium` - Better accuracy (769MB)
+- `large` - Best accuracy (1550MB)
+
+```bash
+export WHISPER_MODEL=base
+./start_whisper.sh start
+```
+
+## Monitoring
+
+```bash
+# GPU usage
+nvidia-smi -l 1
+
+# Service logs  
 tail -f ~/.whisper-api.log
+
+# API endpoints
+http://localhost:8765/docs    # Interactive API docs
+http://localhost:8765/health  # Health check
 ```
 
-### Test diarization setup
-```bash
-python test_diarization.py
-```
+## Next Steps
+
+- Read [ONBOARDING.md](ONBOARDING.md) for detailed documentation
+- Check [examples/](examples/) for more usage patterns
+- Review [PRPs/](PRPs/) for feature specifications
+
+---
+
+**Need help?** Check the full documentation in `docs-archive/` or open an issue!

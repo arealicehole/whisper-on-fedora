@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  whisper-blackwell:
+    build:
+      context: .
+      dockerfile: Dockerfile.blackwell
+    image: whisper-api:blackwell
+    container_name: whisper-blackwell
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - WHISPER_MODEL=small
+      - WHISPER_DEVICE=cuda
+      - WHISPER_COMPUTE=float16
+      - WHISPER_LANGUAGE=en
+      - WHISPER_DIARIZE=true
+    volumes:
+      # Mount config directory for HF token
+      - ~/.config/whisper:/root/.config/whisper:ro
+      # Mount audio files directory (optional)
+      - ./audio_files:/app/audio_files
+    ports:
+      - "8765:8765"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
