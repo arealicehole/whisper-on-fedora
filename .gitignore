@@ -54,6 +54,7 @@ venv/
 ENV/
 env/
 .venv/
+.venvs/
 .env
 
 # IDEs
@@ -112,4 +113,5 @@ Thumbs.db
 
 # Personal config that shouldn't be shared
 config.local.json
-settings.local.json
+settings.local.jsondocker/
+scripts/

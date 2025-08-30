@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 SERVICE_NAME="Whisper API with Optional Diarization"
-VENV_PATH="$HOME/.venvs/whisper-diarize"
+VENV_PATH="$HOME/.venvs/whisper-blackwell"
 SERVICE_PORT="8765"
 LOG_FILE="$HOME/.whisper-api.log"
 PID_FILE="$HOME/.whisper-api.pid"

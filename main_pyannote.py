@@ -32,12 +32,11 @@ import httpx
 # Whisper imports
 from faster_whisper import WhisperModel
 
-# PyAnnote fix not needed with PyTorch 2.8.0+cu128
-# The NMS operator works natively on Blackwell GPU now
-# try:
-#     import pyannote_fix  # This patches torchvision for PyAnnote
-# except Exception as e:
-#     print(f"Warning: Could not apply PyAnnote fix: {e}")
+# Fix for Blackwell GPU PyAnnote compatibility - MUST run before PyAnnote import
+try:
+    import pyannote_fix  # This patches torchvision for PyAnnote
+except Exception as e:
+    print(f"Warning: Could not apply PyAnnote fix: {e}")
 
 # Optional diarization imports with detailed error reporting
 DIARIZATION_AVAILABLE = False
@@ -45,16 +44,16 @@ DIARIZATION_ERROR = None
 try:
     # Re-import torch to ensure it's available
     import torch
-    # Import PyAnnote directly - it works with PyTorch 2.8.0+cu128
+    # Now try to import PyAnnote with our patched torchvision
     from pyannote.audio import Pipeline
     DIARIZATION_AVAILABLE = True
-    print(f"✓ PyAnnote diarization loaded (torch {torch.__version__})")
+    print(f"✓ Diarization modules loaded (torch {torch.__version__})")
 except ImportError as e:
     DIARIZATION_ERROR = str(e)
-    print(f"Warning: PyAnnote diarization not available - {e}")
+    print(f"Warning: Diarization not available - {e}")
     print("  To enable diarization:")
-    print("  1. Install: pip install pyannote.audio")
-    print("  2. Get HF token from: https://huggingface.co/settings/tokens")
+    print("  1. Run: ./setup_venv.sh")
+    print("  2. Or install: pip install torch pyannote.audio")
 except Exception as e:
     DIARIZATION_ERROR = str(e)
     print(f"Warning: Unexpected error loading diarization: {e}")
@@ -173,34 +172,61 @@ if DIARIZATION_AVAILABLE and WHISPER_DIARIZE:
         print("  Add token to ~/.config/whisper/token")
     else:
         try:
-            print(f"Loading PyAnnote diarization pipeline (token: {HF_TOKEN[:10]}...)")
+            print(f"Loading diarization pipeline (token: {HF_TOKEN[:10]}...)")
             
-            # Set environment for Blackwell GPU support
-            if torch.cuda.is_available():
-                capability = torch.cuda.get_device_capability(0)
-                if capability == (12, 0):  # Blackwell GPU
-                    print("  Detected Blackwell GPU (RTX 5060 Ti) - using PyTorch 2.8.0+cu128")
-                    os.environ['TORCH_CUDA_ARCH_LIST'] = '12.0'
-                    # Re-enable TF32 for performance (PyAnnote disables it)
-                    torch.backends.cuda.matmul.allow_tf32 = True
-                    torch.backends.cudnn.allow_tf32 = True
-            
-            # Load PyAnnote diarization pipeline
-            diarization_pipeline = Pipeline.from_pretrained(
+            # Try different model versions based on pyannote version
+            models_to_try = [
                 "pyannote/speaker-diarization-3.1",
-                use_auth_token=HF_TOKEN
-            )
+                "pyannote/speaker-diarization-3.0", 
+                "pyannote/speaker-diarization@2.1"
+            ]
             
-            # Move to GPU
-            if torch.cuda.is_available():
-                diarization_pipeline.to(torch.device("cuda"))
-                print(f"✓ PyAnnote diarization pipeline loaded on GPU")
-            else:
-                raise RuntimeError("GPU required for diarization")
+            for model_name in models_to_try:
+                try:
+                    print(f"  Trying model: {model_name}")
+                    
+                    # Set environment for Blackwell GPU support
+                    if torch.cuda.is_available():
+                        capability = torch.cuda.get_device_capability(0)
+                        if capability == (12, 0):  # Blackwell GPU
+                            print("  Setting up Blackwell GPU compatibility...")
+                            os.environ['TORCH_CUDA_ARCH_LIST'] = '12.0'
+                            os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+                            torch.backends.cuda.matmul.allow_tf32 = True
+                            torch.backends.cudnn.allow_tf32 = True
+                    
+                    diarization_pipeline = Pipeline.from_pretrained(
+                        model_name,
+                        use_auth_token=HF_TOKEN
+                    )
+                    
+                    # Move pipeline to GPU with Blackwell handling
+                    if torch.cuda.is_available():
+                        try:
+                            # Try to move to GPU
+                            diarization_pipeline.to(torch.device("cuda"))
+                            print(f"✓ Diarization pipeline loaded on GPU: {model_name}")
+                        except RuntimeError as gpu_error:
+                            if "no kernel image" in str(gpu_error):
+                                print(f"  Blackwell GPU kernel issue detected, attempting CPU mode for diarization only")
+                                # Keep pipeline on CPU for now - we'll fix this with proper recompilation
+                                print(f"  WARNING: Diarization running on CPU due to Blackwell kernel compatibility")
+                                # Don't move to GPU if kernels aren't available
+                                pass
+                            else:
+                                raise gpu_error
+                    else:
+                        raise RuntimeError("GPU is required for diarization but CUDA is not available")
+                    break
+                    
+                except Exception as model_error:
+                    print(f"    Failed: {str(model_error)[:100]}")
+                    diarization_load_error = str(model_error)
+                    continue
                     
         except Exception as e:
             diarization_load_error = str(e)
-            print(f"Error loading PyAnnote diarization: {e}")
+            print(f"Error loading diarization: {e}")
             
             # Provide specific guidance based on error
             if "401" in str(e) or "Unauthorized" in str(e):
@@ -314,7 +340,7 @@ def transcribe_audio(
             print("Warning: No segments to diarize")
         else:
             try:
-                print(f"Running PyAnnote diarization (num_speakers={num_speakers})...")
+                print(f"Running speaker diarization (num_speakers={num_speakers})...")
                 diarization = diarization_pipeline(
                     audio_path,
                     num_speakers=num_speakers
@@ -330,9 +356,9 @@ def transcribe_audio(
                     if "speaker" not in segment:
                         segment["speaker"] = "UNKNOWN"
                 
-                print("PyAnnote diarization complete")
+                print("Diarization complete")
             except Exception as e:
-                print(f"PyAnnote diarization failed: {e}")
+                print(f"Diarization failed: {e}")
     
     return result
 
@@ -595,6 +621,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",  # Bind to all interfaces for Docker
-        port=8767,  # Changed to 8767 to avoid conflicts
+        port=8765,
         log_level="info"
     )

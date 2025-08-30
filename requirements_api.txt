@@ -1,0 +1,20 @@
+# Core API dependencies only
+# PyTorch comes from NGC base image
+# PyAnnote installed separately with --no-deps to prevent downgrade
+
+# FastAPI and server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.9
+httpx==0.27.0
+pydantic==2.9.2
+aiofiles
+
+# Audio processing
+numpy==1.26.4
+soundfile==0.12.1
+librosa==0.10.2
+ffmpeg-python
+
+# Additional utilities
+python-dotenv
