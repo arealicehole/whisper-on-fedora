@@ -598,3 +598,4 @@ if __name__ == "__main__":
         port=8767,  # Changed to 8767 to avoid conflicts
         log_level="info"
     )
+
