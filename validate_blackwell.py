@@ -200,7 +200,7 @@ def validate_blackwell():
         print("\nNext steps:")
         print("  1. Ensure HuggingFace token is set (if using diarization)")
         print("  2. Run: python main.py")
-        print("  3. Access API at: http://127.0.0.1:8765")
+        print("  3. Access API at: http://127.0.0.1:8767")
         return True
     else:
         print("❌ VALIDATION FAILED")

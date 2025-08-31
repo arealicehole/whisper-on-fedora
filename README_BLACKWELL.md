@@ -56,7 +56,7 @@ python test_diarization.py
 # Start the API service
 python main.py
 
-# Service will be available at http://127.0.0.1:8765
+# Service will be available at http://127.0.0.1:8767
 ```
 
 ## 📊 What Gets Installed

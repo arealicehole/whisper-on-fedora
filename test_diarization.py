@@ -193,7 +193,7 @@ def test_api_service():
         
         # Check if service is running
         try:
-            response = requests.get("http://127.0.0.1:8765/health", timeout=2)
+            response = requests.get("http://127.0.0.1:8767/health", timeout=2)
             if response.status_code == 200:
                 data = response.json()
                 print(f"✅ API service is running")

@@ -8,7 +8,7 @@ set -e
 # Configuration
 SERVICE_NAME="Whisper API with Optional Diarization"
 VENV_PATH="$HOME/.venvs/whisper-blackwell"
-SERVICE_PORT="8765"
+SERVICE_PORT="8767"
 LOG_FILE="$HOME/.whisper-api.log"
 PID_FILE="$HOME/.whisper-api.pid"
 
@@ -182,11 +182,11 @@ show_usage() {
     echo -e "${GREEN}=== How to Use Whisper API ===${NC}"
     echo ""
     echo "1. Basic transcription (no diarization):"
-    echo '   curl -X POST http://localhost:8765/v1/transcribe \'
+    echo '   curl -X POST http://localhost:8767/v1/transcribe \'
     echo '     -F "file=@audio.wav"'
     echo ""
     echo "2. With speaker diarization:"
-    echo '   curl -X POST http://localhost:8765/v1/transcribe \'
+    echo '   curl -X POST http://localhost:8767/v1/transcribe \'
     echo '     -F "file=@audio.wav" \'
     echo '     -F "diarize=true" \'
     echo '     -F "num_speakers=2"'

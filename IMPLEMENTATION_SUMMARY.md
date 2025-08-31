@@ -20,7 +20,7 @@ Successfully implemented a Docker-based solution for the RTX 5060 Ti Blackwell G
 
 ### ✅ Level 3: Service Functionality
 - **Status**: PASSED
-- API accessible on http://localhost:8765
+- API accessible on http://localhost:8767
 - Health endpoint responding with GPU status
 - Whisper running on GPU (no CPU fallback)
 
@@ -60,10 +60,10 @@ Successfully implemented a Docker-based solution for the RTX 5060 Ti Blackwell G
 ### 3. Test the API
 ```bash
 # Health check
-curl http://localhost:8765/health | jq .
+curl http://localhost:8767/health | jq .
 
 # Transcription (requires test audio file)
-curl -X POST http://localhost:8765/v1/transcribe \
+curl -X POST http://localhost:8767/v1/transcribe \
   -F "file=@audio.wav" \
   -F "diarize=false"
 ```
@@ -117,7 +117,7 @@ sudo systemctl status whisper-blackwell
 | Docker Build | ✅ | NGC container with PyTorch 2.8.0+cu128 |
 | GPU Detection | ✅ | RTX 5060 Ti (sm_120) recognized |
 | CUDA Operations | ✅ | No kernel image errors |
-| API Service | ✅ | Accessible on port 8765 |
+| API Service | ✅ | Accessible on port 8767 |
 | Whisper GPU | ✅ | Running on CUDA with float16 |
 | Diarization | ⚠️ | Known PyAnnote compatibility issue |
 

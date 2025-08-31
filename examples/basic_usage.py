@@ -131,7 +131,7 @@ if __name__ == "__main__":
     print("  - meeting.wav") 
     print("  - conversation.wav")
     print("  - video.wav")
-    print("\nAnd that the Whisper API is running on http://localhost:8765")
+    print("\nAnd that the Whisper API is running on http://localhost:8767")
     
     # Uncomment to run examples:
     # example_basic_transcription()

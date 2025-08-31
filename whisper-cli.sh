@@ -3,7 +3,7 @@
 # CLI wrapper for Whisper API with diarization
 # Usage: ./whisper-cli.sh <audio-file> [options]
 
-API_URL="http://localhost:8765"
+API_URL="http://localhost:8767"
 
 # Check if service is running
 if ! curl -s "$API_URL/health" > /dev/null 2>&1; then
