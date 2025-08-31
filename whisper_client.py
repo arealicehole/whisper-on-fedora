@@ -21,7 +21,7 @@ import time
 
 
 class WhisperClient:
-    def __init__(self, api_url: str = "http://localhost:8765"):
+    def __init__(self, api_url: str = "http://localhost:8767"):
         """Initialize Whisper API client
         
         Args:
@@ -223,7 +223,7 @@ if __name__ == "__main__":
     parser.add_argument("--language", help="Language code (e.g., 'en')")
     parser.add_argument("--format", choices=["json", "text", "srt", "vtt", "dialogue", "timeline"], 
                        default="dialogue", help="Output format")
-    parser.add_argument("--api-url", default="http://localhost:8765", help="API URL")
+    parser.add_argument("--api-url", default="http://localhost:8767", help="API URL")
     
     args = parser.parse_args()
     
