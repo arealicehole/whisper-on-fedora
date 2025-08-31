@@ -1,0 +1,65 @@
+name: Sync Runtime Files to Main
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'main.py'
+      - 'gpu_validator.py'
+      - 'sitecustomize.py'
+      - 'startup.py'
+      - 'requirements_api.txt'
+      - 'requirements_blackwell.txt'
+      - 'whisper_client.py'
+      - 'LICENSE'
+
+jobs:
+  sync-runtime:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+      - name: Sync Runtime Files to Main
+        run: |
+          echo "Checking out main branch..."
+          git checkout main
+          
+          echo "Pulling latest changes from main..."
+          git pull origin main
+          
+          echo "Copying runtime files from dev branch..."
+          git checkout dev -- main.py gpu_validator.py sitecustomize.py startup.py
+          git checkout dev -- requirements_api.txt requirements_blackwell.txt
+          git checkout dev -- whisper_client.py LICENSE
+          
+          echo "Checking for changes..."
+          if git diff --staged --quiet; then
+            echo "No runtime changes to sync"
+            exit 0
+          fi
+          
+          echo "Committing changes..."
+          git commit -m "sync: runtime files from dev branch
+          
+          Auto-sync triggered by changes to:
+          $(git diff --staged --name-only | tr '\n' ', ')"
+          
+          echo "Pushing to main branch..."
+          git push origin main
+          
+      - name: Report Status
+        if: success()
+        run: |
+          echo "✅ Runtime files successfully synced to main branch"
+          echo "Modified files:"
+          git diff HEAD~1 --name-only
