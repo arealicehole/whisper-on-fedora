@@ -597,4 +597,4 @@ if __name__ == "__main__":
         host="0.0.0.0",  # Bind to all interfaces for Docker
         port=8767,  # Changed to 8767 to avoid conflicts
         log_level="info"
-    )
+    )TEST CHANGE
