@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  whisper-blackwell:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.blackwell
+    image: whisper-blackwell:latest
+    container_name: whisper-api-blackwell
+    runtime: nvidia
+    ports:
+      - "8765:8765"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0
+      # Blackwell-specific optimizations
+      - TORCH_CUDA_ARCH_LIST=8.0;8.6;8.9;9.0;12.0
+      - CUDA_LAUNCH_BLOCKING=1
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      # API Configuration
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-base}
+      - WHISPER_DEVICE=cuda
+      - WHISPER_COMPUTE=float16
+      - WHISPER_LANGUAGE=${WHISPER_LANGUAGE:-en}
+      - DIARIZATION_ENABLED=true
+      - MAX_WORKERS=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount model caches to avoid re-downloading
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - ${HOME}/.cache/whisper:/root/.cache/whisper
+      - ${HOME}/.cache/torch:/root/.cache/torch
+      # Mount config with HuggingFace token (read-only)
+      - ${HOME}/.config/whisper:/root/.config/whisper:ro
+      # Audio files directory
+      - ../audio_files:/app/audio_files
+      # Logs
+      - ../logs:/app/logs
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

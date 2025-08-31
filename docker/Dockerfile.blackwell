@@ -1,0 +1,84 @@
+# Blackwell GPU Docker Container for Whisper API
+# Uses NVIDIA NGC PyTorch container with native sm_120 support
+FROM nvcr.io/nvidia/pytorch:25.02-py3
+
+# Critical: Set CUDA architecture list including Blackwell
+ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;12.0"
+ENV CUDA_LAUNCH_BLOCKING=1
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    git \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Verify PyTorch is installed (CUDA check happens at runtime)
+RUN python -c "import torch; \
+    print(f'PyTorch version: {torch.__version__}'); \
+    print('PyTorch installed successfully')"
+
+# Install core API dependencies first
+COPY requirements_api.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements_api.txt
+
+# Note: torchvision has issues with NGC container, will use fallback NMS implementation
+
+# Install PyAnnote WITHOUT downgrading PyTorch
+# Critical: Use --no-deps to prevent PyTorch downgrade
+RUN pip install --no-cache-dir --no-deps pyannote.audio==3.3.1 && \
+    pip install --no-cache-dir \
+    asteroid-filterbanks>=0.4.0 \
+    einops>=0.6.0 \
+    hbreader>=0.9.1 \
+    hyperpyyaml>=1.2.0 \
+    julius>=0.2.7 \
+    omegaconf>=2.3.0 \
+    pyannote.core>=5.0.0 \
+    pyannote.database>=5.0.0 \
+    pyannote.metrics>=3.2.0 \
+    pyannote.pipeline>=3.0.0 \
+    pytorch-lightning>=2.0.0 \
+    pytorch-metric-learning>=2.3.0 \
+    rich>=13.0.0 \
+    semver>=3.0.0 \
+    sentencepiece>=0.1.97 \
+    soundfile>=0.12.1 \
+    speechbrain>=1.0.0 \
+    torchmetrics>=0.11.0 \
+    transformers>=4.44.0 \
+    torch-audiomentations>=0.11.0
+
+# Install faster-whisper for GPU transcription
+RUN pip install --no-cache-dir faster-whisper==1.0.3
+
+# Set working directory
+WORKDIR /app
+
+# Copy application files
+COPY main.py ./
+COPY startup.py ./
+COPY pyannote_fix.py ./
+# Copy additional Python files if they exist
+COPY gpu_validator.py ./
+
+# Copy sitecustomize.py to Python's site-packages for automatic loading
+COPY sitecustomize.py /usr/local/lib/python3.12/dist-packages/
+
+# Note: CUDA architecture verification happens at runtime when GPU is available
+# The NGC container includes support for sm_120 (Blackwell)
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/audio_files
+
+# Expose API port
+EXPOSE 8765
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8765/health || exit 1
+
+# Start the API server (sitecustomize.py will pre-patch torchvision)
+CMD ["python", "main.py"]
