@@ -107,26 +107,6 @@ echo "HF_TOKEN=your_token" > ~/.config/whisper/token
 ```
 Get token from [HuggingFace](https://huggingface.co/settings/tokens)
 
-## 🐳 Docker Deployment
-
-### For Blackwell GPUs (RTX 5060 Ti)
-```bash
-cd docker
-docker-compose up -d whisper-blackwell
-```
-
-### For Standard GPUs
-```bash
-docker build -t whisper-api .
-docker run --gpus all -p 8767:8767 whisper-api
-```
-
-### Docker Compose Configuration
-The project includes optimized Docker configurations with:
-- NVIDIA GPU runtime support
-- Pre-configured environment variables
-- Automatic model caching
-- Health checks
 
 ## 📡 API Usage
 
