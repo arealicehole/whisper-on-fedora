@@ -1,0 +1,54 @@
+# NVIDIA NGC Container with FULL Blackwell Support
+# This uses NVIDIA's pre-validated stack that ACTUALLY WORKS with RTX 5060 Ti
+
+FROM nvcr.io/nvidia/pytorch:24.07-py3
+
+# Install system dependencies for audio processing
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    ffmpeg \
+    sox \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --upgrade pip
+
+# Install faster-whisper - will use the NGC-provided CUDA/cuDNN
+RUN pip install faster-whisper==1.0.3
+
+# Install NeMo toolkit with ASR support
+RUN pip install nemo_toolkit[asr]==2.0.0
+
+# Install API dependencies
+RUN pip install \
+    fastapi==0.110.0 \
+    uvicorn[standard]==0.27.0 \
+    python-multipart==0.0.9 \
+    httpx==0.27.0 \
+    pydantic==2.6.0
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy application files
+COPY main_nemo.py main.py
+COPY gpu_validator.py ./
+COPY nemo_diarizer.py ./
+COPY configs/diar_infer_inference.yaml /workspace/configs/
+
+# Create necessary directories
+RUN mkdir -p /workspace/models /workspace/nemo_outputs /workspace/audio_files
+
+# Environment variables - Blackwell optimizations
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;12.0"
+
+# The NGC container already has the right CUDA/cuDNN for Blackwell!
+# No more bullshit about waiting for ecosystem support
+
+EXPOSE 8767
+
+CMD ["python", "main.py"]

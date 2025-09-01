@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  whisper-diarization:
+    build:
+      context: .
+      dockerfile: Dockerfile.with_diarization
+    image: whisper-diarization:latest
+    container_name: whisper-api-diarization
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - WHISPER_MODEL=small  # Use small model for better accuracy with diarization
+      - WHISPER_DEVICE=cuda
+      - WHISPER_COMPUTE=float16
+      - WHISPER_PORT=8767
+      - HF_TOKEN=${HF_TOKEN}  # Pass token from host environment
+      - HF_HOME=/app/.cache/huggingface
+    ports:
+      - "8767:8767"
+    volumes:
+      - ./models:/app/models
+      - ./config:/app/config
+      - ./audio_files:/app/audio_files
+      - ~/.cache/huggingface:/app/.cache/huggingface  # Share HF cache
+      - ~/.config/whisper:/root/.config/whisper:ro  # Share token file
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import requests; r = requests.get('http://localhost:8767/health'); exit(0 if r.json().get('ok') else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Give more time for model downloads

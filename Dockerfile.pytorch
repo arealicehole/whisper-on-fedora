@@ -1,0 +1,50 @@
+# Use PyTorch base image with CUDA 12.4 support
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    faster-whisper==1.0.3 \
+    ctranslate2==4.4.0 \
+    fastapi==0.110.0 \
+    uvicorn[standard]==0.27.0 \
+    python-multipart==0.0.9 \
+    httpx==0.27.0 \
+    pydantic==2.6.0 \
+    numpy \
+    soundfile \
+    librosa \
+    scipy
+
+# Create app directory
+WORKDIR /app
+
+# Copy application files
+COPY main_docker.py main.py
+COPY gpu_validator.py ./
+
+# Create directories for models and config
+RUN mkdir -p /app/models /app/config /app/audio_files
+
+# Environment variables
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+ENV WHISPER_MODEL=tiny
+ENV WHISPER_DEVICE=cuda
+ENV WHISPER_COMPUTE=float16
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; r = requests.get('http://localhost:8767/health'); exit(0 if r.json().get('ok') else 1)" || exit 1
+
+# Expose port
+EXPOSE 8767
+
+# Run the application
+CMD ["python", "main.py"]

@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  whisper-cuda:
+    image: whisper-cuda124:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.pytorch
+    container_name: whisper-api-cuda
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - WHISPER_MODEL=tiny
+      - WHISPER_DEVICE=cuda
+      - WHISPER_COMPUTE=float16
+      - WHISPER_PORT=8767
+    ports:
+      - "8767:8767"
+    volumes:
+      - ./models:/app/models
+      - ./config:/app/config
+      - ./audio_files:/app/audio_files
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8767/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

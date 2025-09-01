@@ -1,0 +1,50 @@
+# Working Dockerfile for Whisper API with CUDA 12.4
+# Tested and confirmed to work with Blackwell GPU
+
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    ffmpeg \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install PyTorch with CUDA 12.4 support (specific version that works)
+RUN pip3 install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+
+# Install faster-whisper and dependencies
+RUN pip3 install \
+    faster-whisper==1.0.3 \
+    ctranslate2==4.4.0 \
+    fastapi==0.110.0 \
+    uvicorn[standard]==0.27.0 \
+    python-multipart==0.0.9 \
+    httpx==0.27.0 \
+    pydantic==2.6.0 \
+    numpy \
+    soundfile \
+    librosa \
+    scipy
+
+# Set working directory
+WORKDIR /app
+
+# Copy application files
+COPY main_docker.py main.py
+
+# Environment variables
+ENV NVIDIA_VISIBLE_DEVICES=0
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+
+# Expose port
+EXPOSE 8767
+
+# Run the application
+CMD ["python3", "main.py"]

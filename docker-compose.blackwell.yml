@@ -1,0 +1,42 @@
+services:
+  whisper-blackwell:
+    build:
+      context: .
+      dockerfile: Dockerfile.blackwell
+    image: whisper-blackwell:d4-n1
+    container_name: whisper-api-blackwell
+    runtime: nvidia
+    ipc: host  # Recommended by NVIDIA for PyTorch
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - WHISPER_MODEL=small
+      - WHISPER_DEVICE=cuda
+      - WHISPER_COMPUTE=float16
+      - WHISPER_PORT=8767
+      - HF_TOKEN=${HF_TOKEN}
+    ports:
+      - "8771:8767"  # Using 8771 to avoid conflicts
+    volumes:
+      - ./models:/workspace/models
+      - ./configs:/workspace/configs
+      - ./audio_files:/workspace/audio_files
+      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ~/.config/whisper:/root/.config/whisper:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; r = requests.get('http://localhost:8767/health'); exit(0 if r.status_code == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

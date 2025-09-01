@@ -1,0 +1,46 @@
+# WORKING Dockerfile for Blackwell GPU (RTX 5060 Ti)
+# Uses NVIDIA NGC container with FULL support for sm_120
+
+FROM nvcr.io/nvidia/pytorch:25.02-py3
+
+# Install system dependencies for audio
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    ffmpeg \
+    sox \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install faster-whisper and API dependencies
+RUN pip install --no-cache-dir \
+    faster-whisper==1.0.3 \
+    fastapi==0.110.0 \
+    uvicorn[standard]==0.27.0 \
+    python-multipart==0.0.9 \
+    httpx==0.27.0 \
+    pydantic==2.6.0 \
+    omegaconf==2.3.0
+
+# Optional: Install NeMo for diarization (can be added later if needed)
+# RUN pip install nemo_toolkit[asr]
+
+WORKDIR /workspace
+
+# Copy application files
+COPY main.py ./
+COPY gpu_validator.py ./
+COPY nemo_diarizer.py ./
+
+# Create necessary directories
+RUN mkdir -p /workspace/models /workspace/configs /workspace/nemo_outputs
+
+# Copy config if using NeMo
+COPY configs/diar_infer_inference.yaml /workspace/configs/
+
+# Environment variables for optimal Blackwell performance
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+
+EXPOSE 8767
+
+CMD ["python", "main.py"]

@@ -183,6 +183,7 @@ if DIARIZATION_AVAILABLE and WHISPER_DIARIZE:
             
             # Initialize NeMo diarizer
             nemo_diarizer = NeMoDiarizer(
+                config_path="configs/diar_infer_inference.yaml",
                 device=WHISPER_DEVICE,
                 gpu_memory_gb=gpu_memory
             )
@@ -302,7 +303,7 @@ def transcribe_audio(
         if not nemo_diarizer:
             print("Warning: Diarization requested but NeMo not available on server")
             # Add fallback behavior - keep segments without speaker labels
-            for segment in result["segments"]:
+            for segment in segments_list:
                 segment["speaker"] = "UNKNOWN"
         elif not segments_list:
             print("Warning: No segments to diarize")
@@ -318,7 +319,7 @@ def transcribe_audio(
                 
                 if speaker_segments:
                     # Use weighted intersection alignment from nemo_diarizer
-                    result["segments"] = align_transcription_with_speakers(
+                    segments_list = align_transcription_with_speakers(
                         segments_list, speaker_segments
                     )
                     
@@ -330,7 +331,7 @@ def transcribe_audio(
                 else:
                     print("Warning: NeMo diarization returned no speaker segments")
                     # Fallback to UNKNOWN speaker
-                    for segment in result["segments"]:
+                    for segment in segments_list:
                         segment["speaker"] = "UNKNOWN"
                 
                 # Memory management after diarization
@@ -340,7 +341,7 @@ def transcribe_audio(
                 print(f"NeMo diarization failed: {e}")
                 print("Falling back to transcription without diarization")
                 # Graceful fallback - keep transcription, mark speakers as UNKNOWN
-                for segment in result["segments"]:
+                for segment in segments_list:
                     segment["speaker"] = "UNKNOWN"
     
     return result
@@ -459,7 +460,6 @@ async def health():
     # Healthy status with GPU-only mode
     health_status = {
         "status": "healthy",
-        "ok": True,
         "gpu_required": True,
         "gpu_available": True,
         "gpu_enforced": True,
