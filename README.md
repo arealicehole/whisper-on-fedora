@@ -39,7 +39,11 @@ python whisper_client.py --file audio.mp3 --diarize
 
 ## Docker Hub
 ```bash
-docker pull arealicehole/whisper-blackwell:d4-n1
+docker pull arealicehole/whisper-blackwell:d4-n2
 ```
+
+### Version History
+- `d4-n2` - Fixed: NeMo toolkit properly installed for diarization
+- `d4-n1` - Initial release (NeMo not installed)
 
 GPU only, no CPU fallback. Models download automatically on first run.
