@@ -126,9 +126,10 @@ curl -X POST http://localhost:8771/v1/transcribe \
 |-------|------|------|-------|---------|----------|
 | `tiny` | 39MB | 1GB | Fastest | Good | Draft transcripts, real-time |
 | `base` | 74MB | 1GB | Fast | Better | General purpose |  
-| `small` | 244MB | 2GB | Medium | Best | Production quality |
+| `small` | 244MB | 2GB | Medium | Great | Production quality |
+| `large-v3` | 3.1GB | 10GB | Slower | Best | Highest accuracy |
 
-**Note**: Only `tiny`, `base`, and `small` models are included in the Docker image. Larger models require manual download due to authentication requirements.
+**Note**: Models are **not included** in the Docker image. Download any model you need - **no authentication required** (they're all public with MIT license). The permission issues mentioned online are typically Docker volume ownership problems, not licensing issues.
 
 ## Response Examples
 
@@ -488,3 +489,29 @@ docker compose -f docker-compose.blackwell.yml up
 - 🔧 **Production Ready** - Health checks, error handling, and monitoring
 
 **System Requirements:** NVIDIA GPU with 2GB+ VRAM, Docker with GPU support
+
+## Model Download Instructions
+
+**Important**: All Whisper models are **public and free** (MIT license). No authentication required!
+
+### Download Models (First Time Setup)
+```bash
+# Fix ownership if using existing ./models/ directory
+sudo chown -R $USER:$USER ./models/
+
+# Download any models you want (no auth needed!)
+docker run --rm --gpus all -v $(pwd)/models:/workspace/models \
+  arealicehole/whisper-blackwell:d5-l1 python3 -c "
+from faster_whisper import WhisperModel
+models = ['tiny', 'base', 'small', 'large-v3']  # Choose which ones you want
+for model in models:
+    print(f'Downloading {model}...')
+    WhisperModel(model, download_root='/workspace/models')
+    print(f'✓ {model} ready!')
+"
+```
+
+### Common Download Issues
+- **Permission denied**: Run `sudo chown -R $USER:$USER ./models/` first
+- **"Auth required" errors**: These are Docker permission issues, not licensing issues  
+- **Models not found**: Restart container after downloading new models
