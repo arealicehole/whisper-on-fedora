@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.blackwell
-    image: whisper-blackwell:d4-n1
+    image: arealicehole/whisper-blackwell:d5-l1
     container_name: whisper-api-blackwell
     runtime: nvidia
     ipc: host  # Recommended by NVIDIA for PyTorch
@@ -14,10 +14,13 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=0
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-      - WHISPER_MODEL=small
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}  # Backward compatibility
+      - WHISPER_DEFAULT_MODEL=${WHISPER_DEFAULT_MODEL:-tiny}  # New default model setting
       - WHISPER_DEVICE=cuda
       - WHISPER_COMPUTE=float16
       - WHISPER_PORT=8767
+      - MODELS_DIRECTORY=/workspace/models  # Local models directory
+      - MAX_LOADED_MODELS=${MAX_LOADED_MODELS:-2}  # Memory management
       - HF_TOKEN=${HF_TOKEN}
     ports:
       - "8771:8767"  # Using 8771 to avoid conflicts

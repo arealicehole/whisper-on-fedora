@@ -20,8 +20,8 @@ RUN pip install --no-cache-dir \
     pydantic==2.6.0 \
     omegaconf==2.3.0
 
-# Optional: Install NeMo for diarization (can be added later if needed)
-# RUN pip install nemo_toolkit[asr]
+# Install NeMo for diarization
+RUN pip install --no-cache-dir nemo_toolkit[asr]
 
 WORKDIR /workspace
 
@@ -29,12 +29,13 @@ WORKDIR /workspace
 COPY main.py ./
 COPY gpu_validator.py ./
 COPY nemo_diarizer.py ./
+COPY model_manager.py ./
 
 # Create necessary directories
 RUN mkdir -p /workspace/models /workspace/configs /workspace/nemo_outputs
 
-# Copy config if using NeMo
-COPY configs/diar_infer_inference.yaml /workspace/configs/
+# Copy config if using NeMo (will be generated at runtime if needed)
+# COPY configs/diar_infer_inference.yaml /workspace/configs/
 
 # Environment variables for optimal Blackwell performance
 ENV NVIDIA_VISIBLE_DEVICES=all

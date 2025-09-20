@@ -31,6 +31,7 @@ import httpx
 
 # Whisper imports
 from faster_whisper import WhisperModel
+from model_manager import WhisperModelManager, ModelConfig
 
 # NeMo diarization imports with detailed error reporting
 DIARIZATION_AVAILABLE = False
@@ -50,7 +51,7 @@ except Exception as e:
     print(f"Warning: Unexpected error loading NeMo diarization: {e}")
 
 # Configuration from environment
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "tiny")  # Changed to tiny which works
+WHISPER_DEFAULT_MODEL = os.environ.get("WHISPER_DEFAULT_MODEL", os.environ.get("WHISPER_MODEL", "tiny"))  # Default model for backward compatibility
 
 # Blackwell GPU initialization
 def initialize_blackwell_gpu():
@@ -148,10 +149,35 @@ if TOKEN_FILE.exists():
     except Exception as e:
         print(f"Warning: Could not load HF token: {e}")
 
-# Initialize models
+# Initialize model manager
 # Note: WHISPER_DEVICE and WHISPER_COMPUTE are guaranteed to be set by GPU enforcement above
-print(f"Loading Whisper model: {WHISPER_MODEL} on {WHISPER_DEVICE} with {WHISPER_COMPUTE}")
-model = WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE)
+print(f"Initializing Whisper Model Manager for local models")
+model_config = ModelConfig(
+    name="whisper_api",
+    device=WHISPER_DEVICE,
+    compute_type=WHISPER_COMPUTE,
+    models_directory=os.environ.get("MODELS_DIRECTORY", "/workspace/models"),
+    max_loaded_models=int(os.environ.get("MAX_LOADED_MODELS", "2"))
+)
+model_manager = WhisperModelManager(model_config)
+
+# Load default model to maintain backward compatibility
+print(f"Loading default Whisper model: {WHISPER_DEFAULT_MODEL} on {WHISPER_DEVICE} with {WHISPER_COMPUTE}")
+try:
+    model_manager.load_model(WHISPER_DEFAULT_MODEL, device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE)
+    print(f"✓ Default model {WHISPER_DEFAULT_MODEL} loaded successfully")
+except Exception as e:
+    print(f"Warning: Could not load default model {WHISPER_DEFAULT_MODEL}: {e}")
+    available_models = model_manager.discover_available_models()
+    if available_models:
+        fallback_model = available_models[0]
+        print(f"Falling back to available model: {fallback_model}")
+        model_manager.load_model(fallback_model, device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE)
+        WHISPER_DEFAULT_MODEL = fallback_model
+    else:
+        print("No local models found! Please ensure models are in /workspace/models/")
+        print("Expected structure: /workspace/models/{model-name}-ct2/")
+        raise RuntimeError("No Whisper models available")
 
 # Initialize NeMo diarization if available
 nemo_diarizer = None
@@ -224,6 +250,7 @@ class JobStatus(str, Enum):
 class TranscriptionRequest(BaseModel):
     audio_url: str
     language_code: Optional[str] = None
+    model: Optional[str] = None
     speaker_labels: Optional[bool] = False
     num_speakers: Optional[int] = None
     format: Optional[str] = "json"
@@ -240,14 +267,21 @@ class JobResponse(BaseModel):
 
 def transcribe_audio(
     audio_path: str,
+    model_name: Optional[str] = None,
     language: Optional[str] = None,
     diarize: bool = False,
     num_speakers: Optional[int] = None
 ) -> Dict[str, Any]:
     """Core transcription function with NeMo diarization"""
     
+    # Get the appropriate model (use default if not specified)
+    selected_model_name = model_name or WHISPER_DEFAULT_MODEL
+    selected_model = model_manager.get_model(selected_model_name)
+    
+    print(f"Using Whisper model: {selected_model_name}")
+    
     # Transcribe with Whisper (with fallback for empty results)
-    segments, info = model.transcribe(
+    segments, info = selected_model.transcribe(
         audio_path,
         language=language or WHISPER_LANGUAGE,
         beam_size=5,
@@ -386,6 +420,7 @@ async def process_transcription_job(job_id: str, audio_path: str, params: Dict):
         
         result = transcribe_audio(
             audio_path,
+            model_name=params.get("model"),
             language=params.get("language"),
             diarize=params.get("diarize", False),
             num_speakers=params.get("num_speakers")
@@ -463,7 +498,7 @@ async def health():
         "gpu_required": True,
         "gpu_available": True,
         "gpu_enforced": True,
-        "model": WHISPER_MODEL,
+        "default_model": WHISPER_DEFAULT_MODEL,
         "device": "cuda",  # Always CUDA in GPU-only mode
         "compute_type": "float16",  # GPU-optimized
         "diarization_backend": "NeMo",
@@ -492,11 +527,140 @@ async def health():
     
     return health_status
 
+@app.get("/v1/models")
+async def list_available_models():
+    """List available local models"""
+    try:
+        available_models = model_manager.discover_available_models()
+        loaded_models = model_manager.get_loaded_models_info()
+        memory_usage = model_manager.monitor_memory_usage()
+        
+        return {
+            "models": available_models,
+            "loaded_models": list(loaded_models.keys()),
+            "default_model": WHISPER_DEFAULT_MODEL,
+            "model_directory": str(model_manager.models_directory),
+            "max_loaded_models": model_manager.max_loaded_models,
+            "memory_usage": memory_usage,
+            "status": "available"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list models: {str(e)}"
+        )
+
+@app.get("/v1/models/{model_name}/info")
+async def get_model_info(model_name: str):
+    """Get information about specific model"""
+    try:
+        # Validate model exists
+        available_models = model_manager.discover_available_models()
+        if model_name not in available_models:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "Model not found",
+                    "requested": model_name,
+                    "available": available_models
+                }
+            )
+        
+        # Get model info
+        model_path = model_manager.get_model_path(model_name)
+        loaded_models = model_manager.get_loaded_models_info()
+        is_loaded = model_name in loaded_models
+        
+        model_info = {
+            "name": model_name,
+            "path": model_path,
+            "is_loaded": is_loaded,
+            "is_default": model_name == WHISPER_DEFAULT_MODEL,
+            "status": "loaded" if is_loaded else "available"
+        }
+        
+        # Add loaded model details if available
+        if is_loaded:
+            model_info.update(loaded_models[model_name])
+        
+        return model_info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get model info: {str(e)}"
+        )
+
+@app.post("/v1/models/{model_name}/load")
+async def load_model_endpoint(model_name: str):
+    """Load a specific model into memory"""
+    try:
+        model_instance = model_manager.load_model(model_name)
+        loaded_models = model_manager.get_loaded_models_info()
+        memory_usage = model_manager.monitor_memory_usage()
+        
+        return {
+            "message": f"Model {model_name} loaded successfully",
+            "model_name": model_name,
+            "loaded_models": list(loaded_models.keys()),
+            "memory_usage": memory_usage
+        }
+        
+    except Exception as e:
+        # Handle specific model manager errors
+        if "not found" in str(e).lower():
+            available_models = model_manager.discover_available_models()
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "Model not found",
+                    "requested": model_name,
+                    "available": available_models
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to load model: {str(e)}"
+            )
+
+@app.post("/v1/models/{model_name}/unload")
+async def unload_model_endpoint(model_name: str):
+    """Unload a specific model from memory"""
+    try:
+        success = model_manager.unload_model(model_name)
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model {model_name} is not currently loaded"
+            )
+        
+        loaded_models = model_manager.get_loaded_models_info()
+        memory_usage = model_manager.monitor_memory_usage()
+        
+        return {
+            "message": f"Model {model_name} unloaded successfully",
+            "model_name": model_name,
+            "loaded_models": list(loaded_models.keys()),
+            "memory_usage": memory_usage
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to unload model: {str(e)}"
+        )
+
 @app.post("/v1/transcribe")
 async def transcribe_v1(
     file: Optional[UploadFile] = File(None),
     audio_url: Optional[str] = Form(None),
     language: Optional[str] = Form(None),
+    model: Optional[str] = Form(None),
     diarize: Optional[bool] = Form(False),
     num_speakers: Optional[int] = Form(None),
     format: Optional[str] = Form("json")
@@ -528,6 +692,7 @@ async def transcribe_v1(
         # Process transcription
         result = transcribe_audio(
             audio_path,
+            model_name=model,
             language=language,
             diarize=diarize,
             num_speakers=num_speakers
@@ -591,6 +756,7 @@ async def create_transcript_v2(
         audio_path,
         {
             "language": request.language_code,
+            "model": request.model,
             "diarize": request.speaker_labels,
             "num_speakers": request.num_speakers
         }
