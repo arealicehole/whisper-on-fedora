@@ -1,0 +1,34 @@
+FROM nvcr.io/nvidia/pytorch:25.02-py3
+
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    ffmpeg \
+    sox \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    faster-whisper==1.0.3 \
+    fastapi==0.110.0 \
+    uvicorn[standard]==0.27.0 \
+    python-multipart==0.0.9 \
+    httpx==0.27.0 \
+    pydantic==2.6.0 scipy \
+    sherpa-onnx
+
+WORKDIR /workspace
+
+COPY main.py ./
+COPY gpu_validator.py ./
+COPY sherpa_diarizer.py ./
+COPY model_manager.py ./
+
+RUN mkdir -p /workspace/models /workspace/models-onnx /workspace/configs
+
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV CUDA_VISIBLE_DEVICES=0
+ENV MODELS_DIRECTORY=/workspace/models
+ENV HF_HOME=/workspace/models
+
+EXPOSE 8768
+
+CMD ["python", "main.py"]

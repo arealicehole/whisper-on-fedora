@@ -4,6 +4,7 @@ Whisper FastAPI Service with NeMo Diarization - Production Ready
 Provides transcription and speaker diarization via REST API using NeMo toolkit
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -37,9 +38,9 @@ from model_manager import WhisperModelManager, ModelConfig
 DIARIZATION_AVAILABLE = False
 DIARIZATION_ERROR = None
 try:
-    from nemo_diarizer import NeMoDiarizer, align_transcription_with_speakers
+    from sherpa_diarizer import SherpaDiarizer as NeMoDiarizer, align_transcription_with_speakers
     DIARIZATION_AVAILABLE = True
-    print(f"✓ NeMo diarization loaded")
+    print(f"✓ Sherpa-ONNX diarization loaded")
 except ImportError as e:
     DIARIZATION_ERROR = str(e)
     print(f"Warning: NeMo diarization not available - {e}")
@@ -135,8 +136,9 @@ WHISPER_DEFAULT_FORMAT = os.environ.get("WHISPER_DEFAULT_FORMAT", "json")
 
 # Token management
 TOKEN_FILE = Path.home() / ".config" / "whisper" / "token"
-HF_TOKEN = None
-if TOKEN_FILE.exists():
+# First try environment variable, then fallback to file
+HF_TOKEN = os.environ.get("HF_TOKEN")
+if not HF_TOKEN and TOKEN_FILE.exists():
     try:
         with open(TOKEN_FILE) as f:
             for line in f:
@@ -145,7 +147,7 @@ if TOKEN_FILE.exists():
                     if token and token != "hf_PUT_YOUR_VALID_TOKEN_HERE":
                         HF_TOKEN = token
                         os.environ["HF_TOKEN"] = token
-                        print(f"Loaded HF token: {token[:10]}...{token[-4:]}")
+                        print(f"Loaded HF token from file: {token[:10]}...{token[-4:]}")
     except Exception as e:
         print(f"Warning: Could not load HF token: {e}")
 
@@ -184,52 +186,14 @@ nemo_diarizer = None
 diarization_load_error = None
 
 if DIARIZATION_AVAILABLE and WHISPER_DIARIZE:
-    if not HF_TOKEN:
-        diarization_load_error = "No HuggingFace token found"
-        print("Warning: Diarization disabled - no HF token")
-        print("  Add token to ~/.config/whisper/token")
-    else:
-        try:
-            print(f"Loading NeMo diarization pipeline (token: {HF_TOKEN[:10]}...)")
-            
-            # Set environment for Blackwell GPU support
-            if torch.cuda.is_available():
-                capability = torch.cuda.get_device_capability(0)
-                if capability == (12, 0):  # Blackwell GPU
-                    print("  Detected Blackwell GPU (RTX 5060 Ti) - optimizing for 16GB VRAM")
-                    # Re-enable TF32 for performance
-                    torch.backends.cuda.matmul.allow_tf32 = True
-                    torch.backends.cudnn.allow_tf32 = True
-            
-            # Get GPU memory info for optimization
-            if torch.cuda.is_available():
-                gpu_memory = torch.cuda.get_device_properties(0).total_memory // (1024**3)
-            else:
-                gpu_memory = 16  # Default assumption
-            
-            # Initialize NeMo diarizer
-            nemo_diarizer = NeMoDiarizer(
-                device=WHISPER_DEVICE,
-                gpu_memory_gb=gpu_memory
-            )
-            
-            print(f"✓ NeMo diarization pipeline loaded on GPU with {gpu_memory}GB memory")
-                    
-        except Exception as e:
-            diarization_load_error = str(e)
-            print(f"Error loading NeMo diarization: {e}")
-            
-            # Provide specific guidance based on error
-            if "NeMo" in str(e) or "not installed" in str(e):
-                print("\n  Fix: Install NeMo toolkit")
-                print("  1. pip install nemo_toolkit[asr]")
-                print("  2. Restart the service")
-            elif "401" in str(e) or "Unauthorized" in str(e):
-                print("\n  Fix: Token might be invalid or expired")
-                print("  1. Get new token: https://huggingface.co/settings/tokens")
-                print("  2. Update ~/.config/whisper/token")
-            
-            nemo_diarizer = None
+    try:
+        print("Loading Sherpa-ONNX diarization pipeline...")
+        nemo_diarizer = NeMoDiarizer(device=WHISPER_DEVICE)
+        print(f"✓ Sherpa-ONNX diarization pipeline loaded on {WHISPER_DEVICE}")
+    except Exception as e:
+        diarization_load_error = str(e)
+        print(f"Error loading Sherpa-ONNX diarization: {e}")
+        nemo_diarizer = None
 
 # Job storage for async processing
 jobs_storage: Dict[str, Dict] = {}
@@ -452,7 +416,7 @@ async def root():
     return {
         "service": "Whisper Transcription API with NeMo Diarization",
         "version": "2.0.0-nemo",
-        "model": WHISPER_MODEL,
+        "model": WHISPER_DEFAULT_MODEL,
         "device": WHISPER_DEVICE,
         "diarization_backend": "NeMo",
         "features": {
@@ -713,6 +677,62 @@ async def transcribe_v1(
         except:
             pass
 
+@app.post("/v1/audio/transcriptions")
+async def openai_transcribe(
+    file: Optional[UploadFile] = File(None),
+    model: Optional[str] = Form(None),
+    language: Optional[str] = Form(None),
+    response_format: Optional[str] = Form("json"),
+    temperature: Optional[float] = Form(None)
+):
+    """OpenAI-compatible transcription endpoint for Hermes STT integration.
+    Accepts multipart file upload at /v1/audio/transcriptions (OpenAI API format)."""
+    
+    if not file:
+        raise HTTPException(status_code=400, detail="No audio file provided")
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        content = await file.read()
+        tmp.write(content)
+        audio_path = tmp.name
+    
+    try:
+        result = transcribe_audio(
+            audio_path,
+            model_name=model,
+            language=language,
+            diarize=False,
+            num_speakers=None
+        )
+        
+        # Extract full text from segments
+        full_text = result.get("text", "")
+        if not full_text and result.get("segments"):
+            full_text = " ".join(s.get("text", "").strip() for s in result["segments"] if s.get("text"))
+        
+        if response_format == "text":
+            return PlainTextResponse(full_text)
+        elif response_format == "verbose_json":
+            return JSONResponse({
+                "task": "transcribe",
+                "language": result.get("language", "en"),
+                "duration": result.get("duration", 0),
+                "text": full_text,
+                "segments": result.get("segments", []),
+                "words": result.get("words", [])
+            })
+        else:
+            # Default JSON format (OpenAI-compatible)
+            return JSONResponse({
+                "text": full_text,
+                "language": result.get("language", "en")
+            })
+    finally:
+        try:
+            os.unlink(audio_path)
+        except:
+            pass
+
 @app.post("/v2/transcript")
 async def create_transcript_v2(
     request: TranscriptionRequest,
@@ -777,6 +797,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",  # Bind to all interfaces for Docker
-        port=8767,  # Changed to 8767 to avoid conflicts
+        port=int(os.environ.get("WHISPER_PORT", 8767)),  # Changed to 8767 to avoid conflicts
         log_level="info"
     )

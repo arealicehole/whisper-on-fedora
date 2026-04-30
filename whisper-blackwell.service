@@ -1,0 +1,16 @@
+[Unit]
+Description=Whisper Blackwell API Service
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ice/whisper-api
+ExecStart=/usr/bin/docker compose -f docker-compose.blackwell.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.blackwell.yml down
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

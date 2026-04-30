@@ -1,0 +1,42 @@
+services:
+  whisper-sherpa:
+    build:
+      context: .
+      dockerfile: Dockerfile.sherpa
+    image: arealicehole/whisper-sherpa:latest
+    container_name: whisper-api-sherpa
+    runtime: nvidia
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - WHISPER_MODEL=small
+      - WHISPER_DEFAULT_MODEL=tiny
+      - WHISPER_DEVICE=cuda
+      - WHISPER_COMPUTE=float16
+      - WHISPER_PORT=8768
+      - MODELS_DIRECTORY=/workspace/models
+      - MAX_LOADED_MODELS=2
+    ports:
+      - "8772:8768"
+    volumes:
+      - ./models:/workspace/models
+      - ./models-onnx:/workspace/models-onnx
+      - ./configs:/workspace/configs
+      - ./audio_files:/workspace/audio_files
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
